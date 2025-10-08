@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Viewer</title>
+  <title>Data Viewer — Auto Load all.csv</title>
   
   <!-- ==== (1) CSS Aplikasi Asli (dipertahankan) ==== -->
   <style>
@@ -34,7 +34,6 @@
     .controls > *{border:1px solid var(--border);background:#fff;color:var(--ink);padding:10px 12px;border-radius:12px}
     .controls input[type="text"]{min-width:220px;flex:1}
     .controls select{min-width:180px}
-    .controls .file{padding:8px 10px}
     .hint{font-size:12px;color:var(--muted)}
 
     .stream{display:grid;gap:12px}
@@ -118,15 +117,6 @@
   </style>
 </head>
 <body>
-  <!--
-  PROMPT / INSTRUKSI PENERAPAN
-  1) Kode app shell ditempel di awal <body>, lalu konten halaman dipindah ke <main class="app-main">.
-  2) Ganti href tombol layanan sesuai file Anda. Di bawah sudah ditambah item "Data Viewer" untuk halaman ini.
-  3) Auto-detect link aktif berdasarkan window.location.pathname; bisa juga manual menambahkan class="active".
-  4) Sidebar bisa collapse/expand, state disimpan pada localStorage ('sb-collapsed').
-  5) CSS shell ter-namespaced agar minim bentrok dengan CSS aplikasi.
-  -->
-
   <div id="APP" class="app-shell">
     <!-- ===== SIDEBAR ===== -->
     <aside class="app-sidebar" aria-label="Navigasi Layanan">
@@ -142,26 +132,25 @@
           <a class="sb-link" href="distribusi_nilai.html" title="Distribusi Nilai"><span class="sb-ico">{#icon-chart#}</span><span class="sb-label">Distribusi Nilai</span></a>
           <a class="sb-link" href="persilangan_nilai.html" title="Persilangan Nilai"><span class="sb-ico">{#icon-grid#}</span><span class="sb-label">Persilangan Nilai</span></a>
           <a class="sb-link" href="timeline_distribusi.html" title="Analisis Timeline"><span class="sb-ico">{#icon-trend#}</span><span class="sb-label">Analisis Timeline</span></a>
-         <!--  <a class="sb-link" href="laporan-ringkas.html" title="Laporan Ringkas"><span class="sb-ico">{#icon-doc#}</span><span class="sb-label">Laporan Ringkas</span></a>
-          <a class="sb-link" href="pengaturan.html" title="Pengaturan"><span class="sb-ico">{#icon-cog#}</span><span class="sb-label">Pengaturan</span></a> -->
       </nav>
       </div>
     </aside>
 
-    <!-- ===== KONTEN HALAMAN (aplikasi asli dipindah ke sini) ===== -->
+    <!-- ===== KONTEN HALAMAN ===== -->
     <main class="app-main">
-      <!-- ======== HEADER APLIKASI ASLI ======== -->
+      <!-- ======== HEADER ======== -->
       <header>
         <div class="bar">
           <div class="logo">Data Viewer</div>
         </div>
       </header>
 
-      <!-- ======== KONTEN APLIKASI ASLI ======== -->
+      <!-- ======== KONTEN APLIKASI ======== -->
       <div class="container">
         <section class="panel">
           <div class="controls">
-            <input id="file" class="file" type="file" accept=".csv" />
+            <!-- (DIHAPUS) input file manual -->
+            <span id="dataSource" title="Sumber data" style="font-size:13px;color:var(--muted);border-style:dashed">📁 Sumber: <b>data/all.csv</b></span>
             <select id="colSelect" disabled>
               <option value="__all__">Cari di semua kolom</option>
             </select>
@@ -174,12 +163,12 @@
         </section>
 
         <div class="toolbar">
-          <div class="count" id="countInfo">Belum ada data.</div>
+          <div class="count" id="countInfo">Memuat <code>data/all.csv</code>…</div>
         </div>
         <div class="hr"></div>
 
         <section id="stream" class="stream">
-          <div class="empty">Unggah file CSV terlebih dahulu. Baris akan ditampilkan seperti kartu cuitan. 🎯</div>
+          <div class="empty">Data akan dimuat otomatis dari <b>data/all.csv</b>. Pastikan folder <code>data</code> berada sejajar dengan file ini.</div>
         </section>
 
         <div class="footer-controls">
@@ -273,7 +262,7 @@
     });
     applySBState();
 
-    // Auto-aktifkan link berdasarkan URL (fallback jika class="active" tidak diset manual)
+    // Auto-aktifkan link berdasarkan URL
     (function autoActive(){
       const path = location.pathname.split('/').pop();
       let matched = false;
@@ -283,14 +272,12 @@
         const fname = href.split('/').pop();
         if(fname && fname === path){ a.classList.add('active'); matched = true; }
       });
-      // Jika tak ada yang match, biarkan yang sudah diberi class active oleh developer
     })();
   </script>
 
-  <!-- ====== Script Aplikasi Asli (dipertahankan) ====== -->
+  <!-- ====== Script Aplikasi (disesuaikan: auto-load data/all.csv) ====== -->
   <script>
     const byId = (id)=>document.getElementById(id);
-    const fileInput = byId('file');
     const colSelect = byId('colSelect');
     const queryInput = byId('query');
     const btnSearch = byId('btnSearch');
@@ -629,21 +616,30 @@
       </article>`;
     }
 
-    // ===== Events =====
-    fileInput.addEventListener('change', async (e)=>{
-      const file = e.target.files?.[0]; if(!file) return;
-      const text = await file.text();
-      const rows = parseCSV(text);
-      if(rows.length===0){ alert('File kosong.'); return; }
-      HEADERS = rows[0];
-      const body = rows.slice(1).filter(r=> r.some(c=> String(c).trim()!==''));
-      DATA = body.map(r=> buildRowObj(HEADERS, r));
-      FILTERED = DATA.slice();
-      populateColumnSelect(HEADERS);
-      enableControls();
-      renderPage();
-    });
+    // ====== AUTO LOAD data/all.csv ======
+    async function loadDefaultCSV(){
+      try{
+        const res = await fetch('data/all.csv', {cache:'no-store'});
+        if(!res.ok){ throw new Error(`Gagal memuat data/all.csv (status ${res.status})`); }
+        const text = await res.text();
+        const rows = parseCSV(text);
+        if(rows.length===0){ throw new Error('Berkas CSV kosong.'); }
+        HEADERS = rows[0];
+        const body = rows.slice(1).filter(r=> r.some(c=> String(c).trim()!==''));
+        DATA = body.map(r=> buildRowObj(HEADERS, r));
+        FILTERED = DATA.slice();
+        populateColumnSelect(HEADERS);
+        enableControls();
+        countInfo.textContent = `Memuat ${FILTERED.length.toLocaleString('id-ID')} baris dari data/all.csv`;
+        renderPage();
+      } catch(err){
+        console.error(err);
+        stream.innerHTML = `<div class="empty">❗ ${escapeHtml(err.message)}. Pastikan folder <code>data</code> berada sejajar dengan file ini dan berkas <code>all.csv</code> tersedia.</div>`;
+        countInfo.textContent = 'Gagal memuat data.';
+      }
+    }
 
+    // ===== Events (tanpa input file) =====
     btnSearch.addEventListener('click', applyFilter);
     btnClear.addEventListener('click', ()=>{ queryInput.value=''; FILTERED = DATA.slice(); page=1; renderPage(); });
     queryInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ applyFilter(); } });
@@ -669,6 +665,9 @@
     btnCopyAlasan.addEventListener('click', copyAlasan);
     btnDownloadAlasan.addEventListener('click', downloadAlasan);
     btnCloseAlasan.addEventListener('click', closeAlasan);
+
+    // Mulai load otomatis
+    window.addEventListener('DOMContentLoaded', loadDefaultCSV);
   </script>
 </body>
 </html>

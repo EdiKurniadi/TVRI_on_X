@@ -670,12 +670,12 @@
     // Mulai load otomatis
     window.addEventListener('DOMContentLoaded', loadDefaultCSV);
 
-    // ===== FIX PATCH: Advanced Search persistence (re-binding safe) =====
-    // Tujuan: membuat penyimpanan & pemulihan konfigurasi Advanced Search tahan terhadap
-    // kasus dimana event listener sudah terpasang sebelum kita melakukan override fungsi.
-    // Strategi: gunakan event listener CAPTURE untuk mencegat klik tombol Advanced / Apply / Clear,
-    // simpan/terapkan konfigurasi, panggil fungsi original sekali, lalu hentikan propagasi.
-    // Tambahan: tetap auto-apply saat data siap via event 'dv:data-ready'.
+    // ===== FIX v2 (GitHub Pages safe): Advanced Search persistence =====
+    // Perbaikan utama:
+    // 1) Tidak lagi memakai stopImmediatePropagation/ preventDefault pada tombol Apply/Clear.
+    //    Kita simpan config lebih dulu, lalu biarkan handler asli berjalan normal (lebih kompatibel di hosting static).
+    // 2) Prefill modal Advanced pada saat dibuka (requestAnimationFrame) agar elemen sudah ter-render.
+    // 3) Auto-apply config tersimpan saat data siap (event 'dv:data-ready').
 
     (function(){
       const ADV_KEY = 'dv-advanced-v1';
@@ -689,8 +689,8 @@
       function collectAdvConfigFromUI(){
         const rows = Array.from(document.querySelectorAll('#condList .cond-row'));
         const conds = rows.map(r=>({
-          col: r.querySelector('.cond-col').value,
-          val: r.querySelector('.cond-val').value
+          col: r.querySelector('.cond-col')?.value ?? '__all__',
+          val: r.querySelector('.cond-val')?.value ?? ''
         })).filter(x=> String(x.val).trim()!=='');
         const dateFrom = document.getElementById('dateFrom')?.value || '';
         const dateTo   = document.getElementById('dateTo')?.value   || '';
@@ -700,25 +700,25 @@
       // --- Paint to UI ---
       function applyAdvConfigToUI(cfg){
         if(!cfg) return;
-        const condList = document.getElementById('condList');
-        if(!condList) return;
-        condList.innerHTML = '';
+        const list = document.getElementById('condList');
+        if(!list) return;
+        list.innerHTML = '';
         if(cfg.conds && cfg.conds.length){
           cfg.conds.forEach(c=> window.addCondRow ? addCondRow(c.col||'__all__', c.val||'') : null);
         } else if(window.addCondRow){
           addCondRow();
         }
-        const dateFromEl = document.getElementById('dateFrom');
-        const dateToEl   = document.getElementById('dateTo');
-        if(dateFromEl) dateFromEl.value = cfg.dateFrom || '';
-        if(dateToEl)   dateToEl.value   = cfg.dateTo   || '';
+        const f = document.getElementById('dateFrom');
+        const t = document.getElementById('dateTo');
+        if(f) f.value = cfg.dateFrom || '';
+        if(t) t.value = cfg.dateTo   || '';
         if(window.updateDateStatus) updateDateStatus();
       }
 
       // --- Apply saved config to FILTERED without opening modal ---
       function applyAdvancedFromConfig(cfg){
-        if(!cfg || !Array.isArray(window.DATA)) return;
-        const HEADERS = Object.keys((window.DATA[0]||{}));
+        if(!cfg || !Array.isArray(window.DATA) || !window.DATA.length) return;
+        const HEADERS = Object.keys(window.DATA[0]);
         const cols = window.inferCols ? inferCols(HEADERS) : {};
         const hasTime = !!cols.time;
         const conds = (cfg.conds||[]).map(({col,val})=>({ col: col||'__all__', q: (window.norm? norm(val): String(val||'').toLowerCase()) }));
@@ -738,63 +738,42 @@
         window.page = 1; if(window.renderPage) renderPage();
       }
 
-      // --- CAPTURE listeners (re-binding safe) ---
-      function installCaptureHandlers(){
-        const btnAdvanced   = document.getElementById('btnAdvanced');
-        const btnApplyAdv   = document.getElementById('btnApplyAdv');
-        const btnClearAdv   = document.getElementById('btnClearAdv');
+      // --- Attach listeners (no stopPropagation) ---
+      function installHandlers(){
+        const btnAdvanced = document.getElementById('btnAdvanced');
+        const btnApplyAdv = document.getElementById('btnApplyAdv');
+        const btnClearAdv = document.getElementById('btnClearAdv');
 
-        // 1) OPEN ADVANCED: buka modal dulu (listener asli), lalu isi ulang field dari saved cfg
         if(btnAdvanced){
-          btnAdvanced.addEventListener('click', (e)=>{
-            // Biarkan listener asli membuka modal terlebih dahulu di bubble-phase.
-            // Kita isi UI di frame berikutnya agar elemen sudah tersedia.
-            requestAnimationFrame(()=>{
-              const saved = readAdvConfig();
-              if(saved) applyAdvConfigToUI(saved);
-            });
-          }, true); // capture
+          btnAdvanced.addEventListener('click', ()=>{
+            // Prefill di frame berikutnya agar modal sudah render
+            requestAnimationFrame(()=>{ const saved = readAdvConfig(); if(saved) applyAdvConfigToUI(saved); });
+          });
         }
 
-        // 2) APPLY: simpan config, jalankan fungsi original apply sekali, cegah listener lain jalan dua kali
         if(btnApplyAdv){
-          btnApplyAdv.addEventListener('click', (e)=>{
-            e.stopImmediatePropagation();
-            e.preventDefault();
+          btnApplyAdv.addEventListener('click', ()=>{
             const cfg = collectAdvConfigFromUI();
             writeAdvConfig(cfg);
-            // Panggil fungsi original
-            if(typeof window.applyAdvanced === 'function'){
-              // Simpan ref original kalau belum
-              if(!window.__origApplyAdvanced) window.__origApplyAdvanced = window.applyAdvanced;
-              window.__origApplyAdvanced.call(window);
-            }
-          }, true); // capture so we intercept before bubble listeners
+            // Biarkan handler asli lanjut memproses & menutup modal
+          });
         }
 
-        // 3) CLEAR: jalankan clear original, lalu hapus storage, cegah listener asli dipanggil lagi
         if(btnClearAdv){
-          btnClearAdv.addEventListener('click', (e)=>{
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            if(typeof window.clearAdvanced === 'function'){
-              if(!window.__origClearAdvanced) window.__origClearAdvanced = window.clearAdvanced;
-              window.__origClearAdvanced.call(window);
-            }
+          btnClearAdv.addEventListener('click', ()=>{
             clearAdvConfig();
-          }, true);
+            // Biarkan handler asli lanjut mereset UI
+          });
         }
       }
 
-      // 4) Auto-apply setelah data siap
-      document.addEventListener('dv:data-ready', ()=>{
-        const saved = readAdvConfig();
-        if(saved) applyAdvancedFromConfig(saved);
-      });
+      // Auto-apply pada data siap (jika ada config tersimpan)
+      document.addEventListener('dv:data-ready', ()=>{ const saved = readAdvConfig(); if(saved) applyAdvancedFromConfig(saved); });
 
-      // Pasang capture listeners segera
-      installCaptureHandlers();
+      // DOM siap → pasang handlers
+      if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installHandlers); else installHandlers();
     })();
+
   </script>
 </body>
 </html>

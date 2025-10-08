@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Distribusi Nilai — Autoload data/all.csv</title>
+  <title>Distribusi Nilai — Autoload data/all.csv + Rentang Waktu</title>
   <style>
     :root{
       --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --border:#e2e8f0;
@@ -63,12 +63,13 @@
 
     /* Modal */
     .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;place-items:center;padding:16px;z-index:50}
-    .modal{width:min(720px,100%);background:#fff;border-radius:16px;border:1px solid var(--border);box-shadow:0 10px 30px rgba(15,23,42,.25)}
+    .modal{width:min(820px,100%);background:#fff;border-radius:16px;border:1px solid var(--border);box-shadow:0 10px 30px rgba(15,23,42,.25)}
     .modal header{padding:16px;border-bottom:1px solid var(--border)}
     .modal .content{padding:16px;display:grid;gap:12px}
     .grid-3{display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr}
+    .grid-2{display:grid;gap:12px;grid-template-columns:1fr 1fr}
     label{font-weight:600;margin-bottom:6px;display:block}
-    select,input[type="text"]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;color:var(--ink)}
+    select,input[type="text"],input[type="date"]{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;color:var(--ink)}
     .modal footer{display:flex;gap:10px;justify-content:flex-end;padding:16px;border-top:1px solid var(--border)}
   </style>
 </head>
@@ -88,7 +89,7 @@
           <a class="sb-link" href="persilangan_nilai.html" title="Persilangan Nilai"><span class="sb-ico">{#icon-grid#}</span><span class="sb-label">Persilangan Nilai</span></a>
           <a class="sb-link" href="timeline_distribusi.html" title="Analisis Timeline"><span class="sb-ico">{#icon-trend#}</span><span class="sb-label">Analisis Timeline</span></a>
       </nav>
-      <div class="sb-help">Folder <b>data/</b> harus sejajar dengan file ini. Pastikan <code>data/all.csv</code> tersedia saat di-host di GitHub Pages.</div>
+      <div class="sb-help">Folder <b>data/</b> harus sejajar dengan file ini. Pastikan <code>data/all.csv</code> tersedia pada GitHub Pages.</div>
     </div>
   </aside>
 
@@ -99,7 +100,6 @@
         <h1>Distribusi Nilai</h1>
       </div>
       <div class="row">
-        <!-- File input DIHILANGKAN. Data dimuat otomatis dari data/all.csv -->
         <span class="badge" id="dataSourceBadge">Sumber data: data/all.csv</span>
         <button id="btnConfig" class="btn">Konfigurasi</button>
         <button id="run" class="btn btn-primary" title="Hitung secara manual (opsional)">Hitung</button>
@@ -142,10 +142,22 @@
         </div>
         <div>
           <label for="filterVal">Nilai =</label>
-          <input id="filterValInput" type="text" placeholder="ketik kata yang ingin dicari" style="display:none" />
+          <input id="filterValInput" type="text" placeholder="ketik kata untuk kolom teks" style="display:none" />
           <select id="filterVal"><option value="" disabled selected>Pilih nilai</option></select>
         </div>
       </div>
+
+      <div class="grid-2">
+        <div>
+          <label for="dateStart">Mulai (created_at)</label>
+          <input id="dateStart" type="date" />
+        </div>
+        <div>
+          <label for="dateEnd">Selesai (created_at)</label>
+          <input id="dateEnd" type="date" />
+        </div>
+      </div>
+
       <div class="grid-3">
         <div>
           <label for="chartType">Tipe Grafik</label>
@@ -154,7 +166,7 @@
             <option value="pie">Pie Chart</option>
           </select>
         </div>
-        <div></div>
+        <div class="muted" style="align-self:end">Jika tanggal kosong, sistem memakai seluruh rentang data.</div>
         <div></div>
       </div>
     </div>
@@ -194,7 +206,6 @@
   });
   applySBState();
 
-  // Auto-aktifkan link sesuai URL jika .active tidak diset manual
   (function autoActive(){
     const path = location.pathname.split('/').pop();
     document.querySelectorAll('.sb-link').forEach(a=>{
@@ -217,11 +228,24 @@
   }
   function rowsToObjects(rows){ const header=rows[0]||[]; const out=[]; for(let r=1;r<rows.length;r++){ const obj={}; for(let c=0;c<header.length;c++) obj[header[c]] = rows[r][c] ?? ''; const any=Object.values(obj).some(v=>(v??'').toString().trim()!==''); if(any) out.push(obj);} return {header,data:out}; }
 
-  // Multi-value default delimiters: , ; |
   function parseMultiValue(cell){ if(cell==null) return []; const raw=String(cell).trim(); if(!raw) return []; if(raw.startsWith('[')&&raw.endsWith(']')){ try{const arr=JSON.parse(raw); return Array.isArray(arr)?arr.map(x=>String(x).trim()).filter(Boolean):[raw];}catch(e){} } const re=/[\s]*[;,|][\s]*/; return raw.split(re).map(s=>s.replace(/^\"|\"$/g,'').trim()).filter(Boolean); }
-
-  // Text contains (case-insensitive) for text & parent_tweet_text
   function containsIgnoreCase(haystack, needle){ if(needle==null) return false; const n=String(needle).trim(); if(!n) return false; return String(haystack??'').toLowerCase().includes(n.toLowerCase()); }
+
+  // ==== Date helpers (created_at) ====
+  function parseCreatedAt(v){
+    if(!v) return null;
+    const s=String(v).trim();
+    // coba ISO langsung
+    let d=new Date(s);
+    if(!isFinite(d)){
+      // coba "YYYY-MM-DD HH:mm:ss" -> ISO
+      const t=s.replace(' ', 'T');
+      d=new Date(t);
+      if(!isFinite(d)) return null;
+    }
+    return d;
+  }
+  function toDateInputValue(d){ const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 
   function rowMatches(row, col, val){
     if(col==='__ALL__') return true; const cell=row[col]; if(cell==null) return false;
@@ -231,7 +255,25 @@
 
   function uniqueValues(data,col){ const set=new Set(); for(const row of data){ const parts=parseMultiValue(row[col]); if(parts.length) parts.forEach(p=>set.add(String(p))); else if(row[col]!=null && String(row[col]).trim()!=='') set.add(String(row[col]).trim()); } return Array.from(set).sort((a,b)=>a.localeCompare(b)); }
 
-  function computeDistribution(data, targetCol, filterCol, filterVal){ const counts=new Map(); let matched=0; for(const row of data){ if(rowMatches(row,filterCol,filterVal)){ matched++; const parts=parseMultiValue(row[targetCol]); if(parts.length){ for(const p of parts){ counts.set(p,(counts.get(p)||0)+1); } } else { const v=(row[targetCol]??'').toString().trim()||'(kosong)'; counts.set(v,(counts.get(v)||0)+1); } } } const arr=Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])); return {arr,matched}; }
+  function computeDistribution(data, targetCol, filterCol, filterVal, dtStart, dtEnd){
+    const counts=new Map(); let matched=0;
+    for(const row of data){
+      // filter rentang waktu
+      if(dtStart || dtEnd){
+        const d=parseCreatedAt(row['created_at']);
+        if(!d) continue; // jika tidak ada tanggal, exclude saat rentang aktif
+        if(dtStart && d < dtStart) continue;
+        if(dtEnd){ const endDay=new Date(dtEnd.getFullYear(), dtEnd.getMonth(), dtEnd.getDate(), 23,59,59,999); if(d > endDay) continue; }
+      }
+      if(rowMatches(row,filterCol,filterVal)){
+        matched++; const parts=parseMultiValue(row[targetCol]);
+        if(parts.length){ for(const p of parts){ counts.set(p,(counts.get(p)||0)+1); } }
+        else { const v=(row[targetCol]??'').toString().trim()||'(kosong)'; counts.set(v,(counts.get(v)||0)+1); }
+      }
+    }
+    const arr=Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    return {arr,matched};
+  }
 
   // ===== Elements & State =====
   const el=id=>document.getElementById(id);
@@ -240,15 +282,15 @@
   const chartCanvas=el('chart'); const ctx=chartCanvas.getContext('2d');
   const cfgBackdrop=el('cfgBackdrop'); const cfgApply=el('cfgApply'); const cfgCancel=el('cfgCancel');
   const selTarget=el('targetCol'); const selFilterCol=el('filterCol'); const selFilterVal=el('filterVal'); const inpFilterVal=el('filterValInput'); const selChartType=el('chartType');
+  const dateStart=el('dateStart'); const dateEnd=el('dateEnd');
 
-  let header=[], data=[]; let lastResult=[];
+  let header=[], data=[]; let lastResult=[]; let minDate=null, maxDate=null;
   const TARGET_ALLOW=['kind','relevan','sentimen','emosi','intensi','aspek'];
   const FILTER_ALLOW=['__ALL__','kind','text','parent_tweet_text','relevan','sentimen','emosi','intensi','aspek'];
 
-  // ===== Autoload CSV dari data/all.csv (same-origin; cocok utk GitHub Pages) =====
+  // ===== Autoload CSV dari data/all.csv =====
   async function loadDefaultCSV(){
     try{
-      // cache: 'no-store' agar tidak tertahan versi lama ketika update di GitHub Pages
       const res = await fetch('data/all.csv', {cache:'no-store'});
       if(!res.ok) throw new Error(`Gagal memuat data/all.csv (status ${res.status})`);
       const text = await res.text();
@@ -256,7 +298,7 @@
       const obj = rowsToObjects(rows);
       header = obj.header; data = obj.data;
 
-      // Susun opsi select sesuai header yang tersedia
+      // header select
       const headerSet=new Set(header);
       const targetOpts=TARGET_ALLOW.filter(c=>headerSet.has(c));
       const filterOpts=FILTER_ALLOW.filter(c=>c==='__ALL__'||headerSet.has(c));
@@ -266,17 +308,20 @@
 
       statRows.textContent=data.length; statMatch.textContent='-'; statUnique.textContent='-';
       drawChart([]);
+
+      // Inisialisasi rentang tanggal dari kolom created_at (jika ada)
+      if(headerSet.has('created_at')){
+        let minD=null, maxD=null; for(const r of data){ const d=parseCreatedAt(r.created_at); if(!d) continue; if(!minD||d<minD) minD=d; if(!maxD||d>maxD) maxD=d; }
+        minDate=minD; maxDate=maxD;
+        if(minDate && maxDate){ dateStart.min=toDateInputValue(minDate); dateEnd.min=toDateInputValue(minDate); dateStart.max=toDateInputValue(maxDate); dateEnd.max=toDateInputValue(maxDate); dateStart.value=''; dateEnd.value=''; }
+      } else {
+        dateStart.disabled=true; dateEnd.disabled=true;
+      }
+
       toast(`Muat ${data.length} baris • ${header.length} kolom dari data/all.csv`,'ok');
-
-      // Trigger event internal bila ingin di-hook komponen lain
       document.dispatchEvent(new CustomEvent('dv:data-ready', {detail:{source:'data/all.csv', rows:data.length}}));
-    } catch(err){
-      console.error(err);
-      toast(err.message||'Gagal memuat data/all.csv','warn');
-    }
+    } catch(err){ console.error(err); toast(err.message||'Gagal memuat data/all.csv','warn'); }
   }
-
-  // Panggil autoload saat halaman siap
   document.addEventListener('DOMContentLoaded', loadDefaultCSV);
 
   // ===== Interaksi UI =====
@@ -300,19 +345,52 @@
   cfgApply.addEventListener('click',()=>{ const ok=runComputation(); if(ok) closeModal(); });
   btnRun.addEventListener('click',()=>{ runComputation(); });
 
+  function getDateRange(){
+    const s=dateStart.value? new Date(dateStart.value+'T00:00:00') : null;
+    const e=dateEnd.value? new Date(dateEnd.value+'T00:00:00') : null; // akan dibuat end-of-day saat filter
+    if(s && e && s>e){ toast('Tanggal mulai melebihi tanggal selesai. Periksa kembali.','warn'); return null; }
+    return {s,e};
+  }
+
   function runComputation(){
     if(!data.length){ toast('Data belum dimuat. Pastikan data/all.csv tersedia.','warn'); return false; }
     if(!selTarget.value){ toast('Pilih Kolom Distribusi di Konfigurasi','warn'); btnConfig.focus(); return false; }
     let needValue=selFilterCol.value!=='__ALL__'; let filterVal;
     if(needValue){ if(selFilterCol.value==='text'||selFilterCol.value==='parent_tweet_text'){ filterVal=inpFilterVal.value.trim(); if(!filterVal){ toast('Isi kata yang ingin dicari pada kolom teks.','warn'); return false; } } else { filterVal=selFilterVal.value; if(!filterVal){ toast('Pilih Nilai pada Kondisi atau set "Semua Data"','warn'); btnConfig.focus(); return false; } } }
-    const {arr,matched}=computeDistribution(data, selTarget.value, selFilterCol.value||'__ALL__', filterVal);
-    lastResult=arr; statMatch.textContent=selFilterCol.value==='__ALL__'?data.length:matched; statUnique.textContent=arr.length;
-    summary.innerHTML=''; summary.append(badge('Distribusi',selTarget.value)); const condText=selFilterCol.value==='__ALL__'?'Semua Data':(selFilterCol.value==='text'||selFilterCol.value==='parent_tweet_text'?`${selFilterCol.value} ~ mengandung "${filterVal}"`:`${selFilterCol.value} = ${filterVal}`); summary.append(badge('Kondisi',condText)); summary.append(badge('Grafik', selChartType.value.toUpperCase()));
+
+    const range=getDateRange(); if(range===null) return false; const {s:eStart,e:eEnd}=range||{}; // rename agar jelas di compute
+
+    const {arr,matched}=computeDistribution(data, selTarget.value, selFilterCol.value||'__ALL__', filterVal, eStart, eEnd);
+    lastResult=arr; statMatch.textContent = (()=>{ // jumlah baris cocok dengan semua filter (termasuk tanggal)
+      if(selFilterCol.value==='__ALL__'){
+        // hitung total data yang lolos rentang jika rentang aktif
+        if(eStart||eEnd){ let c=0; for(const r of data){ const d=parseCreatedAt(r.created_at); if(!d) continue; if(eStart && d<eStart) continue; if(eEnd){ const eo=new Date(eEnd.getFullYear(), eEnd.getMonth(), eEnd.getDate(), 23,59,59,999); if(d>eo) continue; } c++; } return c; }
+        return data.length;
+      }
+      return matched;
+    })();
+    statUnique.textContent=arr.length;
+
+    // Summary badges
+    summary.innerHTML='';
+    summary.append(badge('Distribusi',selTarget.value));
+    const condText=selFilterCol.value==='__ALL__'?'Semua Data':(selFilterCol.value==='text'||selFilterCol.value==='parent_tweet_text'?`${selFilterCol.value} ~ mengandung "${filterVal}"`:`${selFilterCol.value} = ${filterVal}`);
+    summary.append(badge('Kondisi',condText));
+    // Rentang waktu
+    if(eStart||eEnd){
+      const toStr=d=>toDateInputValue(d);
+      const rangeStr=`${eStart?toStr(eStart):'awal'} → ${eEnd?toStr(eEnd):'akhir'}`;
+      summary.append(badge('Rentang', rangeStr));
+    } else {
+      summary.append(badge('Rentang','seluruh data'));
+    }
+    summary.append(badge('Grafik', selChartType.value.toUpperCase()));
+
     drawChart(arr, selChartType.value);
     return true;
   }
 
-  // Download PNG (toBlob + fallback)
+  // Download PNG
   btnDownloadPng.addEventListener('click',()=>{
     if(!lastResult.length){ toast('Belum ada grafik untuk diunduh','warn'); return; }
     const name=`chart-${selChartType.value}.png`;

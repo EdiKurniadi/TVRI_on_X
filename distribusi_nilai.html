@@ -307,5 +307,251 @@
   function toast(msg,type){ const div=document.createElement('div'); div.textContent=msg; Object.assign(div.style,{position:'fixed',bottom:'16px',right:'16px',padding:'10px 14px',borderRadius:'12px',border:'1px solid var(--border)',background:'#fff',boxShadow:'0 1px 2px rgba(15,23,42,.12)'}); div.style.color = type==='ok'? '#16a34a' : (type==='warn'? '#ea580c' : 'var(--ink)'); document.body.appendChild(div); setTimeout(()=>div.remove(),2200); }
   function escapeHtml(str){ return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
+
+<!-- Tempelkan patch ini persis sebelum </body> pada distribusi_nilai.html -->
+<script id="patch-auto-load-allcsv">
+(()=>{
+  const DATA_URL = 'data/all.csv';
+  const SOURCE_BADGE_ID = 'dataSource'; // opsional: akan dibuat jika belum ada
+
+  // ===== Utilities =====
+  const $ = (s,root=document)=>root.querySelector(s);
+  const $$ = (s,root=document)=>Array.from(root.querySelectorAll(s));
+  const escapeHtml = (s)=> String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+  // Parser CSV sederhana, quote-aware
+  function parseCSV(text){
+    const rows=[]; let row=[]; let cur=''; let inQ=false;
+    for(let i=0;i<text.length;i++){
+      const ch=text[i], nx=text[i+1];
+      if(inQ){
+        if(ch==='"' && nx==='"'){ cur+='"'; i++; }
+        else if(ch==='"'){ inQ=false; }
+        else cur+=ch;
+      }else{
+        if(ch==='"'){ inQ=true; }
+        else if(ch===','){ row.push(cur); cur=''; }
+        else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+        else if(ch==='\r'){ /* ignore */ }
+        else cur+=ch;
+      }
+    }
+    if(cur.length>0 || row.length>0){ row.push(cur); rows.push(row); }
+    return rows;
+  }
+  function buildRowObj(header, arr){ const o={}; for(let i=0;i<header.length;i++) o[header[i]]=arr[i]??''; return o; }
+
+  // ===== UI tweaks: sembunyikan input file bila masih ada =====
+  function hideFileInput(){
+    const fin = $('input[type="file"]');
+    if(!fin) return;
+    // Hapus pembungkus terdekat kalau ada, agar tidak makan ruang
+    const wrap = fin.closest('label, .control, .controls, .row, div');
+    if(wrap && wrap.contains(fin)) wrap.remove(); else fin.remove();
+  }
+
+  // Badge sumber data (seperti di index.html)
+  function ensureSourceBadge(){
+    if($('#'+SOURCE_BADGE_ID)) return;
+    // cari bar kontrol teratas
+    const host = $('.controls') || $('header .bar') || $('.toolbar') || $('main .container');
+    if(!host) return;
+    const span = document.createElement('span');
+    span.id = SOURCE_BADGE_ID;
+    span.style.cssText = 'font-size:13px;color:#64748b;border:1px dashed #e2e8f0;padding:8px 10px;border-radius:12px;background:#fff;';
+    span.innerHTML = '📁 Sumber: <b>data/all.csv</b>';
+    // sisipkan di awal controls
+    if(host.firstChild) host.insertBefore(span, host.firstChild); else host.appendChild(span);
+  }
+
+  // ===== Loader utama =====
+  async function loadDefaultCSV(){
+    const countInfo = document.getElementById('countInfo');
+    try{
+      countInfo && (countInfo.textContent = 'Memuat data dari '+DATA_URL+' …');
+      const res = await fetch(DATA_URL, { cache: 'no-store' });
+      if(!res.ok) throw new Error(`Gagal memuat ${DATA_URL} (status ${res.status})`);
+      const text = await res.text();
+      const rows = parseCSV(text);
+      if(rows.length===0) throw new Error('Berkas CSV kosong');
+      const header = rows[0];
+      const body = rows.slice(1).filter(r=> r.some(c=> String(c).trim()!==''));
+      const data = body.map(r=> buildRowObj(header, r));
+
+      // Ekspor global generik agar skrip page bisa memakainya
+      window.DV_HEADERS = header;
+      window.DV_ROWS = data;
+
+      // Umumkan ke halaman lain
+      document.dispatchEvent(new CustomEvent('dv:data-ready', { detail: { headers: header, rows: data } }));
+
+      // Jika halaman punya hook khusus, panggil juga
+      if(typeof window.onDataReady === 'function'){
+        try{ window.onDataReady({ headers: header, rows: data }); }catch(err){ console.warn('onDataReady error', err); }
+      }
+
+      countInfo && (countInfo.textContent = `Memuat ${data.length.toLocaleString('id-ID')} baris dari ${DATA_URL}`);
+    }catch(err){
+      console.error(err);
+      const stream = document.getElementById('stream') || document.getElementById('root') || document.body;
+      if(stream){
+        const div=document.createElement('div');
+        div.className='empty';
+        div.style.cssText='padding:24px;border:1px dashed #e2e8f0;border-radius:12px;background:#fff;color:#64748b;margin:8px 0;';
+        div.innerHTML = `❗ ${escapeHtml(err.message)}. Pastikan folder <code>data</code> sejajar dengan halaman dan berkas <code>all.csv</code> tersedia.`;
+        stream.prepend(div);
+      }
+      countInfo && (countInfo.textContent = 'Gagal memuat data.');
+    }
+  }
+
+  // ===== Bootstrap =====
+  document.addEventListener('DOMContentLoaded', ()=>{
+    hideFileInput();
+    ensureSourceBadge();
+    loadDefaultCSV();
+  });
+})();
+</script>
+
+<!-- Tempelkan blok <script> ini PERSIS sebelum </body> pada distribusi_nilai.html -->
+
+<script id="patch-adv-persist">
+(() => {
+  const STORAGE_KEY = `dv:advConfig:${location.pathname}`;
+  let appliedOnceAfterData = false;
+
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  function readAdvConfig(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch{ return {}; }
+  }
+  function writeAdvConfig(cfg){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg||{}));
+  }
+
+  function collectFromForm(form){
+    if(!form) return {};
+    const cfg = {};
+    const fields = $$('input[name], select[name], textarea[name]', form);
+    for(const el of fields){
+      const name = el.name;
+      if(!name) continue;
+      let val;
+      if(el.type === 'checkbox'){
+        // Kumpulkan sebagai boolean; jika ada grup checkbox bernama sama, simpan array nilai yang tercentang
+        const group = fields.filter(f => f.name===name && f.type==='checkbox');
+        if(group.length>1){
+          val = group.filter(g => g.checked).map(g => g.value);
+        } else {
+          val = el.checked;
+        }
+      } else if(el.type === 'radio'){
+        if(el.checked) val = el.value; else continue;
+      } else if(el.tagName==='SELECT' && el.multiple){
+        val = Array.from(el.selectedOptions).map(o=>o.value);
+      } else {
+        val = el.value;
+      }
+      cfg[name] = val;
+    }
+    return cfg;
+  }
+
+  function applyToForm(form, cfg){
+    if(!form || !cfg) return;
+    const fields = $$('input[name], select[name], textarea[name]', form);
+    for(const el of fields){
+      const name = el.name;
+      if(!(name in cfg)) continue;
+      const saved = cfg[name];
+      if(el.type === 'checkbox'){
+        const group = fields.filter(f => f.name===name && f.type==='checkbox');
+        if(group.length>1){
+          const arr = Array.isArray(saved)? saved.map(String):[];
+          for(const g of group){ g.checked = arr.includes(String(g.value)); }
+        } else {
+          el.checked = !!saved;
+        }
+      } else if(el.type === 'radio'){
+        el.checked = String(el.value) === String(saved);
+      } else if(el.tagName==='SELECT' && el.multiple){
+        const arr = Array.isArray(saved)? saved.map(String):[];
+        Array.from(el.options).forEach(o=>{ o.selected = arr.includes(String(o.value)); });
+      } else {
+        el.value = saved;
+      }
+    }
+  }
+
+  function doApply(cfg){
+    const prefs = cfg || readAdvConfig();
+    // 1) Jika app kamu menyediakan fungsi ini, panggil langsung.
+    if(typeof window.applyAdvancedFromConfig === 'function'){
+      try { window.applyAdvancedFromConfig(prefs); } catch(e){ console.warn('applyAdvancedFromConfig error', e); }
+    }
+    // 2) Selalu fire event agar listener lain bisa merespon.
+    document.dispatchEvent(new CustomEvent('dv:config-applied', { detail: { prefs } }));
+  }
+
+  function wireAutoSave(form){
+    if(!form) return;
+    const handler = () => {
+      const cfg = collectFromForm(form);
+      writeAdvConfig(cfg);
+      // Auto-apply setiap perubahan UI → tanpa perlu klik tombol Apply
+      queueMicrotask(() => doApply(cfg));
+    };
+    $$('input[name], select[name], textarea[name]', form).forEach(el => {
+      el.addEventListener('change', handler);
+      if(el.type==='text' || el.type==='search' || el.tagName==='TEXTAREA'){
+        el.addEventListener('input', handler);
+      }
+    });
+  }
+
+  function hookApplyButton(form){
+    const btn = $('#btn-apply-adv') || $('[data-apply="adv"]');
+    if(!btn) return;
+    btn.addEventListener('click', () => {
+      const cfg = collectFromForm(form);
+      writeAdvConfig(cfg);
+      doApply(cfg);
+    });
+  }
+
+  function findAdvForm(){
+    return $('#adv-config') || $('form[data-adv-form]') || $('.adv-form') || $('#modal-adv form') || $('form#advanced');
+  }
+
+  // === Bootstrap ===
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = findAdvForm();
+    // Pulihkan nilai dari storage ke UI
+    applyToForm(form, readAdvConfig());
+
+    // Auto-apply saat startup (tanpa buka modal / tanpa klik)
+    doApply();
+
+    // Auto-save & auto-apply ketika UI berubah
+    wireAutoSave(form);
+
+    // Pastikan tombol Apply (jika ada) juga menyimpan & menerapkan
+    hookApplyButton(form);
+  });
+
+  // Beberapa halaman menunggu data siap baru bisa menerapkan filter → dengarkan event app
+  document.addEventListener('dv:data-ready', () => {
+    if(appliedOnceAfterData) return;
+    appliedOnceAfterData = true;
+    // Terapkan ulang konfigurasi tersimpan saat data selesai dimuat
+    doApply();
+  });
+})();
+</script>
+
+
 </body>
 </html>

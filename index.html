@@ -774,6 +774,102 @@
       if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installHandlers); else installHandlers();
     })();
 
+    // ===== PATCH: Advanced Search — Auto‑Apply (Live) =====
+    // Tujuan: konfigurasi Advanced Search yang tersimpan akan langsung
+    // diterapkan tanpa perlu menekan tombol "Terapkan" lagi.
+    // Cara kerja:
+    // 1) Saat data siap (event 'dv:data-ready'), auto-apply konfigurasi tersimpan.
+    // 2) Saat halaman selesai parse (DOMContentLoaded), coba apply juga (fallback).
+    // 3) Saat user mengubah field di Advanced (baris kondisi & tanggal),
+    //    simpan ke localStorage dan langsung apply (debounced) ke tabel.
+    // Catatan: patch ini kompatibel dengan "Fix v2 — Advanced Search Persistence (no-stopPropagation) for GitHub Pages".
+
+    (function(){
+      const ADV_KEY = 'dv-advanced-v1';
+
+      // --- utils ---
+      function readAdvConfig(){ try{ return JSON.parse(localStorage.getItem(ADV_KEY)||'null'); }catch{ return null; } }
+      function writeAdvConfig(cfg){ try{ localStorage.setItem(ADV_KEY, JSON.stringify(cfg)); }catch{} }
+
+      // Kumpulkan nilai dari UI Advanced
+      function collectAdvConfigFromUI(){
+        const rows = Array.from(document.querySelectorAll('#condList .cond-row'));
+        const conds = rows.map(r=>({
+          col: r.querySelector('.cond-col')?.value ?? '__all__',
+          val: r.querySelector('.cond-val')?.value ?? ''
+        })).filter(x=> String(x.val).trim()!=='');
+        const dateFrom = document.getElementById('dateFrom')?.value || '';
+        const dateTo   = document.getElementById('dateTo')?.value   || '';
+        return { conds, dateFrom, dateTo };
+      }
+
+      // Terapkan ke data (tanpa membuka modal)
+      function applyAdvancedFromConfig(cfg){
+        if(!cfg || !Array.isArray(window.DATA) || !window.DATA.length) return;
+        const HEADERS = Object.keys(window.DATA[0]);
+        const cols = window.inferCols ? inferCols(HEADERS) : {};
+        const hasTime = !!cols.time;
+        const conds = (cfg.conds||[]).map(({col,val})=>({ col: col||'__all__', q: (window.norm? norm(val): String(val||'').toLowerCase()) }));
+        const from = cfg.dateFrom ? new Date(cfg.dateFrom + 'T00:00:00') : null;
+        const to   = cfg.dateTo   ? new Date(cfg.dateTo   + 'T23:59:59') : null;
+
+        window.FILTERED = window.DATA.filter(row=>{
+          if(conds.length && !(window.rowMatchesAll? rowMatchesAll(row, conds) : conds.every(({col,q})=> (col==='__all__' ? Object.values(row).some(v=> String(v||'').toLowerCase().includes(q)) : String(row[col]||'').toLowerCase().includes(q)) ))) return false;
+          if(hasTime && (from || to)){
+            const d = window.parseDate ? parseDate(row[cols.time]) : new Date(row[cols.time]);
+            if(!d || isNaN(d.getTime())) return false;
+            if(from && d < from) return false;
+            if(to && d > to) return false;
+          }
+          return true;
+        });
+        window.page = 1; if(window.renderPage) renderPage();
+      }
+
+      // Debounce helper
+      function debounce(fn, ms){ let t; return function(){ clearTimeout(t); const args=arguments; t=setTimeout(()=>fn.apply(this,args), ms); }; }
+
+      // Apply tersimpan saat data siap
+      function autoApplySaved(){ const saved = readAdvConfig(); if(saved) applyAdvancedFromConfig(saved); }
+
+      // Pasang listener live pada elemen Advanced
+      function installLiveApply(){
+        const root = document.getElementById('condList');
+        const df = document.getElementById('dateFrom');
+        const dt = document.getElementById('dateTo');
+        const onChange = debounce(()=>{
+          const cfg = collectAdvConfigFromUI();
+          writeAdvConfig(cfg);
+          autoApplySaved();
+        }, 250);
+
+        // Kondisi dinamis (baris bisa ditambah/hapus): pakai event delegation di #condList
+        if(root){
+          root.addEventListener('input', (e)=>{
+            if(e.target && (e.target.classList.contains('cond-col') || e.target.classList.contains('cond-val'))){ onChange(); }
+          });
+          root.addEventListener('change', (e)=>{
+            if(e.target && (e.target.classList.contains('cond-col') || e.target.classList.contains('cond-val'))){ onChange(); }
+          });
+        }
+        if(df) df.addEventListener('change', onChange);
+        if(dt) dt.addEventListener('change', onChange);
+
+        // Jika app menyediakan tombol tambah/hapus baris, cuplik eventnya juga
+        if(window.btnAddCond) btnAddCond.addEventListener('click', ()=> setTimeout(onChange, 0));
+        if(window.btnRemoveCond) btnRemoveCond.addEventListener('click', ()=> setTimeout(onChange, 0));
+      }
+
+      // 1) Auto-apply saat data siap (fetch selesai)
+      document.addEventListener('dv:data-ready', autoApplySaved);
+      // 2) Fallback saat DOM siap (jika DATA sudah siap lebih dulu secara sinkron)
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', ()=>{ installLiveApply(); autoApplySaved(); });
+      } else {
+        installLiveApply(); autoApplySaved();
+      }
+    })();
+
   </script>
 </body>
 </html>

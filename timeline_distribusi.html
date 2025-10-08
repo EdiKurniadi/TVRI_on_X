@@ -25,7 +25,7 @@
     .grid{display:grid;gap:10px;grid-template-columns:1fr}
     .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
     .row label{font-weight:600}
-    input[type=file], select, button{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#fff;color:var(--ink)}
+    select, button{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#fff;color:var(--ink)}
     button{cursor:pointer}
     .hint{color:var(--muted);font-size:12px}
     canvas{margin-top:14px;width:100% !important;max-height:460px}
@@ -36,6 +36,7 @@
     .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:#fff}
     .chip input{margin:0}
     .bad{color:#b91c1c}
+    .good{color:#166534}
   </style>
 
   <!-- === (2) CSS App Shell (diletakkan SETELAH CSS service agar minim bentrok) === -->
@@ -90,9 +91,7 @@
           <a class="sb-link" href="distribusi_nilai.html" title="Distribusi Nilai"><span class="sb-ico">{#icon-chart#}</span><span class="sb-label">Distribusi Nilai</span></a>
           <a class="sb-link" href="persilangan_nilai.html" title="Persilangan Nilai"><span class="sb-ico">{#icon-grid#}</span><span class="sb-label">Persilangan Nilai</span></a>
           <a class="sb-link" href="timeline_distribusi.html" title="Analisis Timeline"><span class="sb-ico">{#icon-trend#}</span><span class="sb-label">Analisis Timeline</span></a>
-         <!--  <a class="sb-link" href="laporan-ringkas.html" title="Laporan Ringkas"><span class="sb-ico">{#icon-doc#}</span><span class="sb-label">Laporan Ringkas</span></a>
-          <a class="sb-link" href="pengaturan.html" title="Pengaturan"><span class="sb-ico">{#icon-cog#}</span><span class="sb-label">Pengaturan</span></a> -->
-      </nav>
+        </nav>
       </div>
     </aside>
 
@@ -102,16 +101,13 @@
       <div class="app-card">
         <header>
           <h1>Distribusi Nilai per Waktu</h1>
+          <p class="sub">Sumber data otomatis: <code>data/all.csv</code> (relative terhadap file ini).</p>
         </header>
 
         <div class="wrap">
           <div class="card">
             <div class="grid">
-              <div class="row">
-                <label for="fileInput">CSV</label>
-                <input id="fileInput" type="file" accept=".csv" />
-                <span id="fileInfo" class="hint"></span>
-              </div>
+              <!-- HAPUS input file: sekarang muat otomatis dari data/all.csv -->
               <div class="row">
                 <label for="timeCol">Kolom Waktu</label>
                 <select id="timeCol"></select>
@@ -126,6 +122,7 @@
                   <option value="month">Per Bulan</option>
                 </select>
               </div>
+
               <canvas id="chart"></canvas>
               <div class="actions">
                 <button id="btnDownload" title="Unduh grafik sebagai PNG">Unduh Grafik (PNG)</button>
@@ -161,7 +158,7 @@
       trend:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 7-7"/><path d="M21 21H3"/></svg>`,
       cloud:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-9 6 6 0 0 0-11.3-1.8A4 4 0 0 0 7 19h10.5z"/></svg>`,
       doc:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6M8 9h3"/></svg>`,
-      cog:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09c0 .66.39 1.25 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.47.47-.61 1.17-.33 1.78.24.52.73.86 1.29.86H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.39-1.51 1z"/></svg>`
+      cog:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.47.47.61 1.17.33 1.78.24.52.73.86 1.29.86H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.39-1.51 1z"/></svg>`
     };
 
     // Ganti placeholder {#icon-...#} dengan SVG
@@ -189,22 +186,18 @@
     // Auto-aktifkan link berdasarkan URL (fallback jika class="active" tidak diset manual)
     (function autoActive(){
       const path = location.pathname.split('/').pop();
-      let matched = false;
       document.querySelectorAll('.sb-link').forEach(a=>{
         const href = a.getAttribute('href');
         if(!href) return;
         const fname = href.split('/').pop();
-        if(fname && fname === path){ a.classList.add('active'); matched = true; }
+        if(fname && fname === path){ a.classList.add('active'); }
       });
-      // Jika tak ada yang match, biarkan yang sudah diberi class active oleh developer
     })();
   </script>
 
-  <!-- === Script halaman service (tetap sama) === -->
+  <!-- === Script halaman service === -->
   <script>
     const el = (id)=>document.getElementById(id);
-    const fileInput = el('fileInput');
-    const fileInfo = el('fileInfo');
     const timeCol = el('timeCol');
     const catCol = el('catCol');
     const intervalSel = el('interval');
@@ -220,11 +213,11 @@
     let rows = [];
     let chart;
     let currentCatList = [];
-    let visibleSet = new Set(); // categories to show (when toggleAll=false) OR all cats (when true)
+    let visibleSet = new Set(); // categories to show
 
     // --- Helpers ---
     function looksLikeDateHeader(name){
-      return /(time|tanggal|date|created|posted|waktu)/i.test(name);
+      return /(created_at|time|tanggal|date|created|posted|waktu)/i.test(name);
     }
 
     function parseDateLoose(v){
@@ -276,7 +269,7 @@
       if ((s.startsWith('[') && s.endsWith(']')) || (s.startsWith('{') && s.endsWith('}'))){
         try{ const parsed = JSON.parse(s); if (Array.isArray(parsed)) return parsed.map(x=>String(x).trim()).filter(Boolean); }catch{}
       }
-      const parts = s.split(/[,;|\/]|\s*\|\s*/g).map(x=>x.trim()).filter(Boolean);
+      const parts = s.split(/[ ,;|\/]|\s*\|\s*/g).map(x=>x.trim()).filter(Boolean);
       return parts.length ? parts : [s];
     }
 
@@ -368,7 +361,9 @@
       const res = computeSeries();
       if (!res){ return; }
       const {labels, datasets, catList} = res;
-      msg.textContent = datasets.length? `Menampilkan ${datasets.length} kategori pada ${labels.length} bucket waktu.` : 'Tidak ada data terhitung.';
+      msg.innerHTML = datasets.length
+        ? `<span class="good">Menampilkan ${datasets.length} kategori pada ${labels.length} bucket waktu.</span>`
+        : 'Tidak ada data terhitung.';
 
       if (chart) chart.destroy();
       chart = new Chart(ctx, {
@@ -392,26 +387,28 @@
       applyVisibility();
     }
 
-    // --- Events ---
-    fileInput.addEventListener('change', (e)=>{
-      const file = e.target.files?.[0];
-      if (!file) return;
-      fileInfo.textContent = ` ${file.name}`;
-      Papa.parse(file, {
+    // === Muat data/all.csv secara otomatis (siap GitHub Pages) ===
+    function loadDefaultCSV(){
+      const url = `data/all.csv?v=${Date.now()}`; // cache-buster ringan agar update cepat di Pages
+      Papa.parse(url, {
+        download: true,
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
         complete: ({data, meta})=>{
-          rows = data.filter(obj=> obj && Object.keys(obj).some(k=> String(obj[k] ?? '').trim()!==''));
-          if (!rows.length){ msg.innerHTML = '<span class=bad>CSV kosong atau tidak terbaca.</span>'; return; }
-          const headers = meta?.fields?.length ? meta.fields : Object.keys(rows[0]);
+          rows = (data || []).filter(obj=> obj && Object.keys(obj).some(k=> String(obj[k] ?? '').trim()!==''));
+          if (!rows.length){ msg.innerHTML = '<span class="bad">CSV kosong atau tidak terbaca.</span>'; return; }
+          const headers = (meta && meta.fields && meta.fields.length) ? meta.fields : Object.keys(rows[0]);
           updateSelectors(headers);
           render();
         },
-        error: (err)=>{ msg.innerHTML = `<span class=bad>Gagal membaca CSV: ${err}</span>`; }
+        error: (err)=>{
+          msg.innerHTML = `<span class="bad">Gagal membaca <code>data/all.csv</code>: ${err}. Pastikan file berada di folder <code>data/</code> dan di-commit ke branch GitHub Pages.</span>`;
+        }
       });
-    });
+    }
 
+    // --- Events ---
     timeCol.addEventListener('change', render);
     catCol.addEventListener('change', render);
     intervalSel.addEventListener('change', render);
@@ -452,6 +449,9 @@
       toggleAll.checked = false;
       applyVisibility();
     });
+
+    // Start auto-load ketika DOM siap
+    document.addEventListener('DOMContentLoaded', loadDefaultCSV);
   </script>
 </body>
 </html>
